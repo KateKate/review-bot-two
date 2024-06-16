@@ -1,10 +1,6 @@
-import { reviewPullRequest } from "../reviewBot";
+import { reviewBot } from "../reviewBot";
 
-// Define the fetch function to handle incoming requests
 export async function fetch(req: Request) {
-  if (req.method === "GET") {
-    return new Response("Hello");
-  }
   if (req.method === "POST") {
     try {
       const payload = await req.json();
@@ -15,7 +11,7 @@ export async function fetch(req: Request) {
         const repo = repository.name;
         const pull_number = pull_request.number;
 
-        await reviewPullRequest(owner, repo, pull_number);
+        await reviewBot(owner, repo, pull_number);
       }
 
       return new Response("OK", { status: 200 });

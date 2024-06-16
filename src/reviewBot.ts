@@ -1,4 +1,5 @@
 import { Octokit } from "@octokit/rest";
+import { generateReview } from "./generateReview";
 
 const octokit = new Octokit({
   auth: process.env.GITHUB_TOKEN,
@@ -23,27 +24,10 @@ async function fetchPullRequestFiles(
     owner,
     repo,
     pull_number,
+    state: "open",
   });
 
   return files;
-}
-
-async function generateReview(content: string) {
-  const response = await fetch(
-    "https://api.openai.com/v1/engines/davinci/completions",
-    {
-      body: JSON.stringify({
-        prompt: `Review the following code:\n\n${content}\n\nReview:`,
-        max_tokens: 150,
-      }),
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    }
-  ).then((res) => res.json());
-
-  return response.data.choices[0].text.trim();
 }
 
 export async function reviewPullRequest(
@@ -53,16 +37,32 @@ export async function reviewPullRequest(
 ) {
   const files = await fetchPullRequestFiles(owner, repo, pull_number);
 
+  const reviewList = [];
   for (const file of files) {
-    const content = Buffer.from(file.patch, "base64").toString("utf-8");
-    const review = await generateReview(content);
+    const { patch } = file;
+    const review = await generateReview(patch!);
+    reviewList.push(review);
+  }
 
-    await octokit.pulls.createReview({
-      owner,
-      repo,
-      pull_number,
-      body: review,
-      event: "COMMENT",
-    });
+  return reviewList;
+}
+
+export async function reviewBot(
+  owner: string,
+  repo: string,
+  pull_number: number
+) {
+  const reviewList = await reviewPullRequest(owner, repo, pull_number);
+
+  for (const review of reviewList) {
+    if (review && review !== "no content found") {
+      await octokit.pulls.createReview({
+        owner,
+        repo,
+        pull_number,
+        body: review,
+        event: "COMMENT",
+      });
+    }
   }
 }
